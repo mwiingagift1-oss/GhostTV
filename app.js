@@ -14,7 +14,8 @@ const FREE_CHANNELS = [
   {id:'free-nhk',name:'NHK World-Japan',group:'International News',webUrl:'https://www3.nhk.or.jp/nhkworld/en/live/',source:'Official broadcaster player page'},
   {id:'free-nasa',name:'NASA+',group:'Science & Space',webUrl:'https://plus.nasa.gov/',source:'Official NASA streaming page'},
   {id:'free-enca',name:'eNCA',group:'African News',webUrl:'https://www.enca.com/live',source:'Official broadcaster player page'},
-  {id:'free-plex',name:'Plex Free Live TV',group:'Entertainment',webUrl:'https://watch.plex.tv/live-tv',source:'Plex official free ad-supported TV; regional lineup varies'}
+  {id:'free-plex',name:'Plex Free Live TV',group:'Entertainment',webUrl:'https://watch.plex.tv/live-tv',source:'Plex official free ad-supported TV; regional lineup varies'},
+  {id:'jw-broadcasting',name:'JW Broadcasting',group:'Faith & Family · Official',webUrl:'https://www.jw.org/en/library/videos/',source:'Official JW.ORG video library; use its Stream This Channel feature for continuous themed playback'}
 ];
 
 const LOCAL_CHANNELS = [
@@ -77,9 +78,21 @@ function escapeHTML(s=''){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','
 function navigate(page){state.page=page;document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id==='page-'+page));document.querySelectorAll('[data-page]').forEach(b=>b.classList.toggle('active',b.classList.contains('nav-link')&&b.dataset.page===page));$('#crumb').textContent=page.replace('-',' ').toUpperCase();if(page==='live')renderChannels();if(page==='movies'||page==='series')renderMedia(page);if(page==='favourites')renderFavourites();if(page==='home')renderHome();window.scrollTo(0,0)}
 document.addEventListener('click',e=>{const b=e.target.closest('[data-page]');if(b){e.preventDefault();navigate(b.dataset.page)}});
 function parseM3U(text){const lines=text.replace(/^\uFEFF/,'').split(/\r?\n/);let out=[],meta=null;for(const raw of lines){const line=raw.trim();if(line.startsWith('#EXTINF:')){const attrs={};for(const m of line.matchAll(/([\w-]+)="([^"]*)"/g))attrs[m[1].toLowerCase()]=m[2];const name=line.slice(line.lastIndexOf(',')+1).trim()||attrs['tvg-name']||'Unnamed channel';meta={name,group:attrs['group-title']||'Other',logo:attrs['tvg-logo']||'',id:'ch-'+crypto.randomUUID()}}else if(line&&!line.startsWith('#')&&meta){out.push({...meta,url:line});meta=null}}return out}
+
+// Public playlists are community-maintained indexes of openly published streams.
+// Only direct HLS URLs are imported; individual broadcasters may still geo-block or
+// disable browser playback. The app never proxies or circumvents those restrictions.
+const PUBLIC_PLAYLISTS=[
+  {label:'Zambia',url:'https://iptv-org.github.io/iptv/countries/zm.m3u',limit:80},
+  {label:'Southern Africa',url:'https://iptv-org.github.io/iptv/regions/saf.m3u',limit:60},
+  {label:'Kids',url:'https://iptv-org.github.io/iptv/categories/kids.m3u',limit:100},
+  {label:'Animation',url:'https://iptv-org.github.io/iptv/categories/animation.m3u',limit:80}
+];
+async function importPublicChannels(){const button=$('#loadPublicChannels');button.disabled=true;button.textContent='Loading free channels…';let added=0,failed=0;const existing=new Set(state.channels.map(c=>(c.url||c.streamUrl||'').trim()));try{for(const list of PUBLIC_PLAYLISTS){try{const response=await fetch(list.url,{cache:'no-store'});if(!response.ok)throw new Error('HTTP '+response.status);const parsed=parseM3U(await response.text()).filter(c=>/^https?:\/\//i.test(c.url)&&/\.m3u8(?:$|\?)/i.test(c.url)).slice(0,list.limit);for(const channel of parsed){if(existing.has(channel.url))continue;existing.add(channel.url);state.channels.push({...channel,group:`Free public · ${list.label}`,source:'iptv-org public playlist; stream availability and browser compatibility vary'});added++;}}catch(error){failed++;}}save();renderAll();navigate('live');toast(`${added} free HLS channels added${failed?`; ${failed} list(s) could not load`:''}`);}finally{button.disabled=false;button.textContent='＋ Load free public channels';}}
 function addPlaylist(text){const parsed=parseM3U(text);if(!parsed.length){toast('No valid channel entries found');return}const seen=new Set(state.channels.map(c=>c.url));const fresh=parsed.filter(c=>!seen.has(c.url));state.channels.push(...fresh);save();renderAll();toast(`Added ${fresh.length} channels`);navigate('live')}
 $('#playlistFile').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;addPlaylist(await f.text());e.target.value=''});
 $('#loadUrl').onclick=async()=>{const url=$('#playlistUrl').value.trim();if(!url)return toast('Enter a playlist URL');try{const r=await fetch(url);if(!r.ok)throw Error('HTTP '+r.status);addPlaylist(await r.text())}catch(e){toast('Could not load URL. The host may block browser access (CORS). Try importing the M3U file instead.')}};
+$('#loadPublicChannels').onclick=importPublicChannels;
 function renderChannels(){const q=$('#channelSearch').value.toLowerCase(),group=$('#groupFilter').value;const groups=[...new Set(state.channels.map(c=>c.group))].sort();$('#groupFilter').innerHTML='<option value="">All groups</option>'+groups.map(g=>`<option ${g===group?'selected':''}>${escapeHTML(g)}</option>`).join('');const items=state.channels.filter(c=>(!group||c.group===group)&&c.name.toLowerCase().includes(q));$('#channelList').innerHTML=items.length?items.map(c=>`<div class="channel-row ${state.current?.id===c.id?'selected':''}" ${(c.streamUrl||c.embedUrl||c.url)?`data-channel="${c.id}"`:`data-channel-link="${c.id}"`}><div class="channel-logo">${c.logo?`<img src="${escapeHTML(c.logo)}" onerror="this.remove()">`:'▶'}</div><div><b>${escapeHTML(c.name)}</b><small>${escapeHTML(c.group)} · ${(c.streamUrl||c.embedUrl||c.url)?'In-app player':'Official website only'}</small></div><span class="channel-open">${(c.streamUrl||c.embedUrl||c.url)?'▶':'↗'}</span></div>`).join(''):'<div class="empty-state">No matching channels found.</div>'}
 $('#channelSearch').oninput=renderChannels;$('#groupFilter').onchange=renderChannels;
 $('#channelList').addEventListener('click',e=>{const row=e.target.closest('[data-channel],[data-channel-link]');if(!row)return;const id=row.dataset.channel||row.dataset.channelLink;const c=state.channels.find(x=>x.id===id);if(!c)return;if(c.streamUrl||c.embedUrl||c.url){play(c,'channel');return;}if(c.webUrl){window.open(c.webUrl,'_blank','noopener');toast('This broadcaster currently provides a website player, not an embedded stream.');}});
@@ -103,7 +116,8 @@ async function play(item,type){
         state.hls.loadSource(source);state.hls.attachMedia(video);
         const applyCap=()=>{if(!state.hls)return;const profile=STREAM_PROFILES[state.streamMode]||STREAM_PROFILES.auto;let cap=-1;state.hls.levels.forEach((level,index)=>{if(level.height&&level.height<=profile.maxHeight)cap=index});state.hls.autoLevelCapping=cap;};
         state.hls.on(Hls.Events.MANIFEST_PARSED,applyCap);state.hls.on(Hls.Events.LEVELS_UPDATED,applyCap);
-        state.hls.on(Hls.Events.ERROR,(_,data)=>{if(data.fatal)toast('This stream is unavailable right now. Try another channel.');});
+        let mediaRecoveries=0,networkRecoveries=0;
+        state.hls.on(Hls.Events.ERROR,(_,data)=>{if(!data.fatal)return;if(data.type===Hls.ErrorTypes.MEDIA_ERROR&&mediaRecoveries<1){mediaRecoveries++;state.hls.recoverMediaError();return;}if(data.type===Hls.ErrorTypes.NETWORK_ERROR&&networkRecoveries<1){networkRecoveries++;state.hls.startLoad();return;}toast('This stream cannot play in this browser right now. It may be offline, restricted, or block browser playback.');});
       }else if(video.canPlayType('application/vnd.apple.mpegurl'))video.src=source;
       else video.src=source;
     }else return;
@@ -137,6 +151,7 @@ $('#exportData').onclick=()=>{const blob=new Blob([JSON.stringify({channels:stat
 $('#clearHistory').onclick=()=>{localStorage.removeItem('ghost-tv-history');toast('Watch history cleared')};
 $('#resetApp').onclick=async()=>{if(!confirm('Delete all Ghost TV playlists, library items and locally stored videos?'))return;state.channels=[...FREE_CHANNELS,...LOCAL_CHANNELS];state.media=[...FREE_MOVIES,...FREE_SERIES];state.favourites=[];save();await dbClear();if(state.hls)state.hls.destroy();$('#video').pause();$('#video').removeAttribute('src');$('#playerPlaceholder').classList.remove('hidden');renderAll();toast('App data cleared')};
 $('#globalSearch').oninput=e=>{const q=e.target.value.toLowerCase();if(!q)return;const found=state.media.find(m=>m.title.toLowerCase().includes(q));if(found){navigate(found.type);$('#'+found.type+'Search').value=q;renderMedia(found.type)}else{const ch=state.channels.find(c=>c.name.toLowerCase().includes(q));if(ch){navigate('live');$('#channelSearch').value=q;renderChannels()}}};
-$('#streamMode').onchange=e=>{state.streamMode=e.target.value;save();if(state.current?.url)play(state.current,state.current.type||'channel');toast('Streaming preference updated')};
+$('#streamMode').onchange=e=>{state.streamMode=e.target.value;save();if(state.current?.url||state.current?.streamUrl)play(state.current,state.current.type||'channel');toast('Streaming preference updated')};
+$('#video').addEventListener('error',()=>{if(state.current?.url||state.current?.streamUrl)toast('This channel stream failed. Try another source or open the broadcaster website.');});
 async function init(){load();$('#streamMode').value=state.streamMode;try{await openDB();const stored=await dbAll();const ids=new Set(stored.map(x=>x.id));const before=state.media.length;state.media=state.media.filter(m=>m.sourceUrl||ids.has(m.blobId));if(state.media.length!==before)save()}catch(e){toast('Local media storage is unavailable in this browser mode')}renderAll();if('serviceWorker'in navigator&&location.protocol.startsWith('http'))navigator.serviceWorker.register('./sw.js').catch(()=>{});}
 init();

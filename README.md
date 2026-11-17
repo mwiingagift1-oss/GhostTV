@@ -5,6 +5,8 @@ A personal media hub for Windows browsers. Publish these files to GitHub Pages a
 ## Included
 - Home dashboard and counts
 - Live TV playlist importer for local `.m3u` / `.m3u8` files
+- Optional public HLS channel importer for Zambia, Southern Africa, Kids and Animation playlists (community-indexed; availability varies)
+- Official JW Broadcasting video-library link
 - Channel search and group filtering
 - HLS playback support through hls.js, with native browser playback fallback
 - Streaming modes: Auto, Data saver (up to 480p), Balanced (up to 720p), High quality (up to 1080p)
@@ -34,6 +36,7 @@ A personal media hub for Windows browsers. Publish these files to GitHub Pages a
 - Use only streams and media you are legally authorised to access. It cannot bypass subscriptions, DRM, or provider restrictions.
 - Browser playback depends on the stream format and codec. Data saver and resolution caps work only when the provider supplies multiple HLS quality renditions; a single-bitrate stream cannot be transcoded by this browser app. Not every IPTV stream will play in every browser.
 - HLS.js is loaded from a CDN for HLS playback; the first HLS playback needs internet access.
+- Public playlist imports use the iptv-org public playlist index; its entries are community-maintained and are not a guarantee that every stream is authorised in every territory, online, or browser-compatible.
 - A playlist URL can fail because of CORS. This app does not proxy or circumvent provider restrictions.
 - Local videos are stored in IndexedDB; browser storage quotas vary. Clearing site data removes these files. The JSON backup exports metadata and playlist URLs, not the video file contents.
 - The app shell can be cached after first visit, but streaming requires a working connection.
